@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from celery.schedules import crontab
 
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -75,6 +76,13 @@ SPECTACULAR_SETTINGS = {"TITLE":"Job Scraper API","VERSION":"1.0.0"}
 # Celery
 CELERY_BROKER_URL = os.getenv("REDIS_URL","redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("REDIS_URL","redis://localhost:6379/0")
+CELERY_BEAT_SCHEDULE = {
+    "scrape-indeed-6hr": {
+        "task": "scraper.tasks.scrape_source_task",
+        "schedule": crontab(minute=0, hour="*/6"),
+        "args": ("indeed", "Data Analyst", "Lagos"),
+    },
+}
 
 # Scraper knobs
 SCRAPER_MAX_PAGES = int(os.getenv("SCRAPER_MAX_PAGES","2"))
