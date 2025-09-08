@@ -7,8 +7,10 @@ from django.conf import settings
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service  # add this
 
 SALARY_RE = re.compile(r"([\$€£₦])?[\s]*([\d,]+)")
+
 
 def _headless_driver():
     opts = Options()
@@ -17,7 +19,8 @@ def _headless_driver():
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--window-size=1366,900")
-    return webdriver.Chrome(ChromeDriverManager().install(), options=opts)
+
+    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=opts)
 
 def parse_salary(s: str):
     if not s: return None, None, None
