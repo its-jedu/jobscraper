@@ -1,0 +1,61 @@
+{% extends "dashboard/base.html" %}
+{% block content %}
+<h3 class="mb-3">Jobs</h3>
+
+<form class="row g-2 mb-3">
+  <div class="col-md-3">
+    <input name="q" value="{{ q }}" class="form-control" placeholder="Search title/company">
+  </div>
+  <div class="col-md-3">
+    <input name="location" value="{{ location }}" class="form-control" placeholder="Location">
+  </div>
+  <div class="col-md-2">
+    <select name="source" class="form-select">
+      <option value="">All sources</option>
+      <option value="indeed" {% if source == "indeed" %}selected{% endif %}>Indeed</option>
+      <option value="glassdoor" {% if source == "glassdoor" %}selected{% endif %}>Glassdoor</option>
+      <option value="linkedin" {% if source == "linkedin" %}selected{% endif %}>LinkedIn</option>
+    </select>
+  </div>
+  <div class="col-md-2">
+    <select name="remote" class="form-select">
+      <option value="">Remote?</option>
+      <option value="true" {% if remote == "true" %}selected{% endif %}>Yes</option>
+    </select>
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-primary w-100">Filter</button>
+  </div>
+</form>
+
+{% if last_run %}
+<p class="text-muted">Last synced: {{ last_run.finished_at|default:last_run.started_at }} ({{ last_run.source }}: {{ last_run.status }}, saved {{ last_run.total_saved }}/{{ last_run.total_found }})</p>
+{% endif %}
+
+<div class="list-group">
+  {% for job in page_obj %}
+    <a class="list-group-item list-group-item-action" href="{% url 'job_detail' job.id %}">
+      <div class="d-flex w-100 justify-content-between">
+        <h5 class="mb-1">{{ job.title }}</h5>
+        <small>{{ job.created_at|date:"Y-m-d H:i" }}</small>
+      </div>
+      <p class="mb-1">{{ job.company }} — {{ job.location }} {% if job.is_remote %}<span class="badge text-bg-success">Remote</span>{% endif %}</p>
+      <small>{{ job.source|capfirst }}{% if job.salary_raw %} · {{ job.salary_raw }}{% endif %}</small>
+    </a>
+  {% empty %}
+    <div class="alert alert-info">No jobs found. Try different filters.</div>
+  {% endfor %}
+</div>
+
+<nav class="mt-3">
+  <ul class="pagination">
+    {% if page_obj.has_previous %}
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ q }}&location={{ location }}&source={{ source }}&remote={{ remote }}">Previous</a></li>
+    {% endif %}
+    <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+    {% if page_obj.has_next %}
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ q }}&location={{ location }}&source={{ source }}&remote={{ remote }}">Next</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endblock %}
