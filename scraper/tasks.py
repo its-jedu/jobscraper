@@ -4,17 +4,32 @@ from jobs.models import ScrapeRun
 from jobs.services.ingest import upsert_jobs
 from django.conf import settings
 from .selectors.indeed import scrape_indeed
+from .selectors.glassdoor import scrape_glassdoor
+from .selectors.linkedin import scrape_linkedin
+
+SCRAPERS = {
+    "indeed": scrape_indeed,
+    "glassdoor": scrape_glassdoor,
+    "linkedin": scrape_linkedin,
+}
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def scrape_source_task(self, source: str, query: str, location: str, pages: int = None):
     run = ScrapeRun.objects.create(source=source, query=f"{query} @ {location}", status="PENDING")
     try:
-        if source == "indeed":
-            items = scrape_indeed(query, location, pages or settings.SCRAPER_MAX_PAGES)
+        items = []
+        if source == "all":
+            for s, fn in SCRAPERS.items():
+                batch = fn(query, location, pages or settings.SCRAPER_MAX_PAGES)
+                items.extend(batch)
         else:
-            items = []  # placeholders for other sources
+            fn = SCRAPERS.get(source)
+            if not fn:
+                raise ValueError(f"Unknown source: {source}")
+            items = fn(query, location, pages or settings.SCRAPER_MAX_PAGES)
+
         run.total_found = len(items)
-        saved, dup = upsert_jobs(items)
+        saved, _dup = upsert_jobs(items)
         run.total_saved = saved
         run.status = "SUCCESS"
     except Exception as e:

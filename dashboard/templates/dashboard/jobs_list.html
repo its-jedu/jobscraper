@@ -4,29 +4,37 @@
 
 <form class="row g-2 mb-3">
   <div class="col-md-3">
-    <input name="q" value="{{ q }}" class="form-control" placeholder="Search title/company">
+    <input name="q" value="{{ q }}" class="form-control" placeholder="Role / keywords" required />
   </div>
   <div class="col-md-3">
-    <input name="location" value="{{ location }}" class="form-control" placeholder="Location">
+    <input name="location" value="{{ location }}" class="form-control" placeholder="Location (e.g., Lagos)" />
   </div>
   <div class="col-md-2">
     <select name="source" class="form-select">
-      <option value="">All sources</option>
+      <option value="">All (filter)</option>
+      <option value="all" {% if source == "all" %}selected{% endif %}>All (scrape)</option>
       <option value="indeed" {% if source == "indeed" %}selected{% endif %}>Indeed</option>
       <option value="glassdoor" {% if source == "glassdoor" %}selected{% endif %}>Glassdoor</option>
       <option value="linkedin" {% if source == "linkedin" %}selected{% endif %}>LinkedIn</option>
     </select>
   </div>
-  <div class="col-md-2">
-    <select name="remote" class="form-select">
-      <option value="">Remote?</option>
-      <option value="true" {% if remote == "true" %}selected{% endif %}>Yes</option>
-    </select>
+  <div class="col-md-1">
+    <input name="pages" type="number" min="1" max="5" value="{{ pages|default:'1' }}" class="form-control" title="Pages to fetch" />
   </div>
-  <div class="col-md-2">
+  <div class="col-md-1">
     <button class="btn btn-primary w-100">Filter</button>
   </div>
+  <div class="col-md-2">
+    <button class="btn btn-secondary w-100" name="action" value="scrape">Search &amp; Fetch</button>
+  </div>
 </form>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags|default:'info' }} my-2">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
 
 {% if last_run %}
 <p class="text-muted">Last synced: {{ last_run.finished_at|default:last_run.started_at }} ({{ last_run.source }}: {{ last_run.status }}, saved {{ last_run.total_saved }}/{{ last_run.total_found }})</p>
