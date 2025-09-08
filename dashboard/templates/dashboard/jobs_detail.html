@@ -1,0 +1,17 @@
+{% extends "dashboard/base.html" %}
+{% block content %}
+<a href="/" class="btn btn-link">&larr; Back</a>
+<div class="card">
+  <div class="card-body">
+    <h4 class="card-title">{{ job.title }}</h4>
+    <h6 class="card-subtitle mb-2 text-muted">{{ job.company }} — {{ job.location }}</h6>
+    <p>
+      <span class="badge text-bg-secondary">{{ job.source|capfirst }}</span>
+      {% if job.is_remote %}<span class="badge text-bg-success">Remote</span>{% endif %}
+      {% if job.salary_raw %}<span class="badge text-bg-info">{{ job.salary_raw }}</span>{% endif %}
+    </p>
+    <p class="card-text" style="white-space:pre-wrap">{{ job.description }}</p>
+    <a class="btn btn-primary" href="{{ job.url }}" target="_blank" rel="noopener">View on site</a>
+  </div>
+</div>
+{% endblock %}

@@ -36,3 +36,4 @@ class JobViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(created_at__gte=now() - timedelta(days=days))
             except: pass
         return qs
+

@@ -9,3 +9,4 @@ class JobSerializer(serializers.ModelSerializer):
             "salary_min","salary_max","currency","salary_raw",
             "post_date","description","url","is_remote","created_at"
         ]
+        
