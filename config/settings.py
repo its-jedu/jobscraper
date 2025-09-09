@@ -1,11 +1,10 @@
 """
 Django settings for config project.
 """
-
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from celery.schedules import crontab
+# from celery.schedules import crontab
 
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,7 +59,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# ------------------------------------------------------------------ Database (Postgres only)
+# ------------------------------------------------------------------ Database
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -82,13 +81,13 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # ------------------------------------------------------------------ I18N/Static
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = os.getenv("TIME_ZONE", "Africa/Lagos")
 USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "dashboard" / "static"]  # make sure this folder exists
+STATICFILES_DIRS = [BASE_DIR / "dashboard" / "static"]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -103,33 +102,19 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
 }
 
-# ------------------------------------------------------------------ Celery (worker + beat)
-# CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-# CELERY_RESULT_BACKEND = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-# CELERY_TIMEZONE = TIME_ZONE
-
-# Define what the scheduler should scrape every 6 hours (edit as needed)
+# ------------------------------------------------------------------ Celery schedules
 SCRAPE_SCHEDULES = [
     {"source": "indeed",    "q": os.getenv("SCRAPE_Q", "Data Analyst"), "loc": os.getenv("SCRAPE_LOC", "Lagos"), "pages": int(os.getenv("SCRAPE_PAGES", "2"))},
     {"source": "glassdoor", "q": os.getenv("SCRAPE_Q", "Data Analyst"), "loc": os.getenv("SCRAPE_LOC", "Lagos"), "pages": int(os.getenv("SCRAPE_PAGES", "2"))},
     {"source": "linkedin",  "q": os.getenv("SCRAPE_Q", "Data Analyst"), "loc": os.getenv("SCRAPE_LOC", "Lagos"), "pages": int(os.getenv("SCRAPE_PAGES", "2"))},
 ]
 
-# CELERY_BEAT_SCHEDULE = {
-#     f"scrape-{cfg['source']}-{i}": {
-#         "task": "scraper.tasks.scrape_source_task",
-#         "schedule": crontab(minute=0, hour="*/6"),  # every 6 hours
-#         "args": (cfg["source"], cfg["q"], cfg["loc"], cfg["pages"]),
-#     }
-#     for i, cfg in enumerate(SCRAPE_SCHEDULES)
-# }
-
 # ------------------------------------------------------------------ Scraper knobs
 SCRAPER_MAX_PAGES = int(os.getenv("SCRAPER_MAX_PAGES", "2"))
 SCRAPER_DELAY_MS = int(os.getenv("SCRAPER_DELAY_MS", "1200"))
-SELENIUM_HEADLESS = os.getenv("SELENIUM_HEADLESS", "1") == "1"
+SELENIUM_HEADLESS = os.getenv("SELENIUM_HEADLESS", "0") == "1"  # set to 0 to run visible
 
-# ------------------------------------------------------------------ Minimal logging
+# ------------------------------------------------------------------ Logging
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
