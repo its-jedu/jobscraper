@@ -7,6 +7,7 @@ from scraper.selectors.indeed import scrape_indeed
 from scraper.selectors.glassdoor import scrape_glassdoor
 from scraper.selectors.linkedin import scrape_linkedin
 from django.contrib import messages
+from scraper.tasks import run_scrape
 
 SCRAPE_MAP = {
     "indeed": scrape_indeed,
@@ -22,27 +23,16 @@ def home(request):
     pages = request.GET.get("pages","1")    # NEW
 
     # On-demand scrape
-    if action == "scrape" and q and source:
+    if action == "scrape" and source:
         try:
-            pages_i = max(1, min(5, int(pages)))
-        except: pages_i = 1
-
-        items = []
-        if source == "all":
-            for _, fn in SCRAPE_MAP.items():
-                items.extend(fn(q, location or "", pages=pages_i))
+            pages_i = max(1, min(5, int(pages or 1)))
+        except:
+            pages_i = 1
+        run = run_scrape(source, q, location or "", pages_i)
+        if run.status == "SUCCESS":
+            messages.success(request, f"Fetched {run.total_saved}/{run.total_found} from {source}.")
         else:
-            fn = SCRAPE_MAP.get(source)
-            if fn:
-                items = fn(q, location or "", pages=pages_i)
-            else:
-                messages.error(request, f"Unknown source: {source}")
-
-        if items:
-            upsert_jobs(items)
-            messages.success(request, f"Fetched {len(items)} job(s) from {source}.")
-        else:
-            messages.warning(request, f"No results fetched from {source}.")
+            messages.error(request, f"Scrape failed: {run.error_log}")
         return redirect(f"{reverse('home')}?q={q}&location={location}&source={source}")
 
     # Filter existing jobs

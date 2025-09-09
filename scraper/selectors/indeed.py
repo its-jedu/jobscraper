@@ -1,86 +1,64 @@
-import time, hashlib, re
-from typing import List, Dict
+import time, hashlib
 from urllib.parse import urlencode
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from django.conf import settings
 
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service  # add this
-
-SALARY_RE = re.compile(r"([\$€£₦])?[\s]*([\d,]+)")
-
-
-def _headless_driver():
-    opts = Options()
+def _driver():
+    o = Options()
     if settings.SELENIUM_HEADLESS:
-        opts.add_argument("--headless=new")
-    opts.add_argument("--no-sandbox")
-    opts.add_argument("--disable-dev-shm-usage")
-    opts.add_argument("--window-size=1366,900")
+        o.add_argument("--headless=new")
+    o.add_argument("--no-sandbox"); o.add_argument("--disable-dev-shm-usage")
+    o.add_argument("--disable-gpu"); o.add_argument("--window-size=1920,1080")
+    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=o)
 
-    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=opts)
-
-def parse_salary(s: str):
-    if not s: return None, None, None
-    m = SALARY_RE.findall(s)
-    if not m: return None, None, None
-    currency = m[0][0] or None
-    nums = [int(x[1].replace(",", "")) for x in m]
-    if len(nums) == 1: return nums[0], None, currency
-    return min(nums), max(nums), currency
-
-def scrape_indeed(query: str, location: str, pages: int = None) -> List[Dict]:
-    pages = pages or settings.SCRAPER_MAX_PAGES
+def scrape_indeed(query: str | None = "", location: str | None = "", pages: int = 1):
+    base = "https://www.indeed.com/jobs"
     delay = settings.SCRAPER_DELAY_MS / 1000.0
-
-    base = "https://www.indeed.com/jobs?"
-    results: List[Dict] = []
-    driver = _headless_driver()
+    items = []
+    d = _driver()
     try:
-        for page in range(pages):
-            params = {"q": query, "l": location, "start": page * 10}
-            url = base + urlencode(params)
-            driver.get(url)
-            time.sleep(delay)
+        for p in range(pages):
+            params = {}
+            if (query or "").strip():    params["q"] = query
+            if (location or "").strip(): params["l"] = location
+            if p: params["start"] = p * 10
+            url = "https://www.indeed.com/jobs" + ("?" + urlencode(params) if params else (f"?start={p*10}" if p else ""))
 
-            soup = BeautifulSoup(driver.page_source, "html.parser")
-            cards = soup.select("div.job_seen_beacon") or soup.select("li[class*=result]")
-            if not cards: break
+            d.get(url); time.sleep(delay)
+            soup = BeautifulSoup(d.page_source, "html.parser")
+            cards = soup.select("div.job_seen_beacon")
+            if not cards: 
+                if p == 0:  # no results even on first page → stop
+                    break
+                continue
 
             for c in cards:
-                title_el = c.select_one("h2 a")
-                company_el = c.select_one("span.companyName")
-                loc_el = c.select_one("div.companyLocation")
-                salary_el = c.select_one("div.metadata.salary-snippet-container, span.salary-snippet")
-                desc_el = c.select_one("div.job-snippet")
+                t = c.select_one("h2.jobTitle span")
+                comp = c.select_one("span.companyName")
+                loc = c.select_one("div.companyLocation")
+                sal = c.select_one("div.metadata.salary-snippet-container")
+                link = c.select_one("a[href*='/pagead/'], a[href^='/rc/'], a.jcs-JobTitle")
 
-                title = (title_el.get_text(strip=True) if title_el else None) or "Job"
-                url_rel = title_el["href"] if title_el and title_el.has_attr("href") else None
-                job_url = ("https://www.indeed.com" + url_rel) if url_rel and url_rel.startswith("/") else url_rel or ""
-                company = company_el.get_text(strip=True) if company_el else None
-                location_txt = loc_el.get_text(" ", strip=True) if loc_el else None
-                salary_raw = salary_el.get_text(" ", strip=True) if salary_el else None
-                desc = desc_el.get_text(" ", strip=True) if desc_el else None
+                title = t.get_text(strip=True) if t else None
+                company = comp.get_text(strip=True) if comp else None
+                location_txt = loc.get_text(" ", strip=True) if loc else None
+                salary_raw = sal.get_text(" ", strip=True) if sal else None
+                href = link["href"] if link and link.has_attr("href") else ""
+                job_url = ("https://www.indeed.com" + href) if href.startswith("/") else href
 
-                smin, smax, curr = parse_salary(salary_raw or "")
-                basis = f"indeed|{job_url}|{title}|{company or ''}"
-                hash_key = hashlib.sha256(basis.encode("utf-8")).hexdigest()
-
-                results.append({
-                    "source":"indeed",
-                    "external_id": None,
-                    "title": title,
-                    "company": company,
-                    "location": location_txt,
-                    "salary_min": smin, "salary_max": smax, "currency": curr, "salary_raw": salary_raw,
-                    "post_date": None,
-                    "description": desc,
-                    "url": job_url,
-                    "is_remote": bool(location_txt and "remote" in location_txt.lower()),
-                    "hash_key": hash_key,
+                hk = hashlib.sha256(f"indeed|{job_url}|{title or ''}|{company or ''}".encode()).hexdigest()
+                items.append({
+                    "source":"indeed","external_id":None,
+                    "title":title,"company":company,"location":location_txt,
+                    "salary_min":None,"salary_max":None,"currency":None,"salary_raw":salary_raw,
+                    "post_date":None,"description":None,"url":job_url,
+                    "is_remote": bool((location_txt or "").lower().find("remote") >= 0),
+                    "hash_key":hk,
                 })
     finally:
-        driver.quit()
-    return results
+        d.quit()
+    return items
