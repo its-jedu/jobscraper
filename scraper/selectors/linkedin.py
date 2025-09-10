@@ -82,32 +82,43 @@ def _abs(href: str) -> str:
 # Parsing (list card)
 # ---------------------------
 def _parse_card_basic(html: str) -> Optional[Dict]:
-    """Read list card to get external_id and rough fields (fallbacks)."""
     s = BeautifulSoup(html, "html.parser")
 
-    # Prefer cards with explicit job id
+    # Prefer explicit job id
     root = s.select_one("div.job-card-container[data-job-id]")
     external_id = root.get("data-job-id").strip() if root else None
 
-    # Fallback: derive from href
-    if not external_id:
-        a = (s.select_one("a.base-card__full-link")
-             or s.select_one("a.job-card-container__link")
-             or s.select_one("a[href*='/jobs/view/']")
-             or s.select_one("a"))
-        href = (a.get("href", "") if a else "").split("?")[0].strip()
+    # Fallback from link
+    a = (s.select_one("a.job-card-container__link")
+         or s.select_one("a.base-card__full-link")
+         or s.select_one("a[href*='/jobs/view/']")
+         or s.select_one("a"))
+    if not external_id and a:
+        href = (a.get("href", "") or "").split("?")[0].strip()
         m = re.search(r"/jobs/view/(\d+)", href)
         external_id = m.group(1) if m else None
-
     if not external_id:
         return None
 
     url = f"https://www.linkedin.com/jobs/view/{external_id}/"
 
+    # ---- robust title extraction on the CARD ----
     title_el = (s.select_one(".job-card-list__title")
                 or s.select_one(".job-card-container__title")
                 or s.select_one(".base-search-card__title")
                 or s.select_one("h3"))
+    # Try multiple fallbacks, including anchor attributes
+    title = None
+    if title_el:
+        title = title_el.get_text(strip=True)
+    if (not title) and a:
+        title = (a.get_text(strip=True) or a.get("aria-label") or a.get("title"))
+    if not title:
+        # sometimes the inner span has the text
+        inner = s.select_one(".job-card-list__title span, .job-card-container__title span")
+        if inner:
+            title = inner.get_text(strip=True)
+
     comp_el = (s.select_one(".job-card-container__company-name")
                or s.select_one(".base-search-card__subtitle")
                or s.select_one("h4"))
@@ -115,11 +126,10 @@ def _parse_card_basic(html: str) -> Optional[Dict]:
                or s.select_one(".job-search-card__location")
                or s.select_one("[data-test-location]"))
 
-    title = title_el.get_text(strip=True) if title_el else None
     company = comp_el.get_text(strip=True) if comp_el else None
     location = loc_el.get_text(" ", strip=True) if loc_el else None
 
-    # Fallback so row always saves
+    # last resort so it still saves (but with better chance above)
     if not title:
         title = f"LinkedIn Job {external_id}"
 
@@ -146,7 +156,7 @@ def _parse_card_basic(html: str) -> Optional[Dict]:
 # Enrichment (right pane)
 # ---------------------------
 def _enrich_from_pane(d, current: Dict) -> Dict:
-    """Click card already selected; extract real title/company/location/description from right pane."""
+    """Pull true title/company/location/description from the right pane after click."""
     try:
         WebDriverWait(d, 10).until(
             EC.presence_of_element_located(
@@ -159,25 +169,34 @@ def _enrich_from_pane(d, current: Dict) -> Dict:
     soup = BeautifulSoup(d.page_source, "html.parser")
 
     title_el = soup.select_one(".jobs-unified-top-card__job-title")
-    comp_el  = soup.select_one(".jobs-unified-top-card__company-name a, .jobs-unified-top-card__company-name")
-    loc_el   = soup.select_one(".jobs-unified-top-card__primary-description")
-    desc_el  = soup.select_one("#job-details, .jobs-description__content, #job-details-container")
+    if not title_el:
+        # older/newer variants
+        title_el = soup.select_one("h1.top-card-layout__title, h1")
+
+    comp_el = (soup.select_one(".jobs-unified-top-card__company-name a")
+               or soup.select_one(".jobs-unified-top-card__company-name"))
+    if not comp_el:
+        comp_el = soup.select_one(".topcard__org-name-link, .topcard__flavor")
+
+    loc_el = (soup.select_one(".jobs-unified-top-card__primary-description")
+              or soup.select_one(".topcard__flavor--bullet"))
+
+    desc_el = soup.select_one("#job-details, .jobs-description__content, #job-details-container")
 
     title = title_el.get_text(strip=True) if title_el else None
     company = comp_el.get_text(strip=True) if comp_el else None
+
     location = None
     if loc_el:
-        # usually "Company · Location" – keep the part after the dot if present
         raw = loc_el.get_text(" ", strip=True)
         parts = [p.strip() for p in raw.split("·")]
         location = parts[-1] if parts else raw
 
     description = desc_el.get_text("\n", strip=True) if desc_el else None
 
-    # update current dict only if new info exists
-    if title:      current["title"] = title
-    if company:    current["company"] = company
-    if location:   current["location"] = location
+    if title: current["title"] = title
+    if company: current["company"] = company
+    if location: current["location"] = location
     if description: current["description"] = description
     current["is_remote"] = "remote" in (current.get("location") or "").lower()
     return current
